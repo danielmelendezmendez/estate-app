@@ -1,0 +1,19 @@
+{
+  "name": "phase0-cli",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "tsx --experimental-sqlite src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@estate-app/ai-pipeline": "workspace:*",
+    "@estate-app/schema": "workspace:*",
+    "@estate-app/db": "workspace:*",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+build/
+.env
+*.log
+phase0-results.csv
+.DS_Store

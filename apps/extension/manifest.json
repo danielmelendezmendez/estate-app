@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Estate App — Listing Assistant (dev prototype)",
+  "version": "0.0.1",
+  "description": "Phase 0 prototype: pre-fills a Kleinanzeigen listing form from generated item data. Human reviews and clicks publish.",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://www.kleinanzeigen.de/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.kleinanzeigen.de/p-anzeige-aufgeben-schritt2.html*"],
+      "js": ["src/content-script.js"]
+    }
+  ],
+  "action": {
+    "default_title": "Estate App Listing Assistant"
+  }
+}
