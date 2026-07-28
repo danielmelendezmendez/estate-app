@@ -18,10 +18,17 @@ const STATUS_MESSAGES = [
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessageIndex, setStatusMessageIndex] = useState(0);
   const router = useRouter();
+
+  function handleFileSelect(selected: File | null) {
+    setFile(selected);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(selected ? URL.createObjectURL(selected) : null);
+  }
 
   useEffect(() => {
     if (status !== "uploading") return;
@@ -74,21 +81,29 @@ export default function UploadPage() {
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <label
-          className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-16 text-center shadow-card transition ${
-            file ? "border-accent bg-surface" : "border-ink/15 bg-surface hover:border-accent/50 hover:shadow-card-hover"
+          className={`flex cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border-2 border-dashed shadow-card transition ${
+            file ? "border-accent bg-surface" : "border-ink/15 bg-surface px-6 py-16 text-center hover:border-accent/50 hover:shadow-card-hover"
           }`}
         >
           <input
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
           />
-          <ImagePlus className={`h-8 w-8 ${file ? "text-accent" : "text-ink-muted"}`} />
-          {file ? (
-            <p className="font-mono text-sm text-ink">{file.name}</p>
+          {file && previewUrl ? (
+            <div className="w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={previewUrl} alt={file.name} className="h-64 w-full object-cover" />
+              <p className="flex items-center justify-center gap-1.5 border-t border-ink/5 bg-canvas px-4 py-3 font-mono text-xs text-ink-muted">
+                {file.name} · click to choose a different photo
+              </p>
+            </div>
           ) : (
-            <p className="text-ink-muted">Click to choose a photo, or drag one here.</p>
+            <>
+              <ImagePlus className="h-8 w-8 text-ink-muted" />
+              <p className="text-ink-muted">Click to choose a photo, or drag one here.</p>
+            </>
           )}
         </label>
 

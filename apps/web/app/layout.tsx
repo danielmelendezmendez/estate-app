@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { SiteHeader } from "./components/SiteHeader";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -15,8 +16,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Review — Estate App",
-  description: "Review AI-identified items before listing them.",
+  title: "Clearly — turn a room into listings",
+  description:
+    "Photograph a room. Clearly identifies what's worth selling, drafts the listings, and helps you publish — so you don't have to do it all yourself.",
 };
 
 export default function RootLayout({
@@ -29,6 +31,7 @@ export default function RootLayout({
       <body
         className={`${manrope.variable} ${inter.variable} ${plexMono.variable} font-body bg-canvas text-ink`}
       >
+        <SiteHeader />
         {children}
       </body>
     </html>

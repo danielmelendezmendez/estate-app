@@ -142,25 +142,17 @@ export default async function ReviewPage({
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
-      <header className="mb-10 flex items-baseline justify-between">
-        <div>
-          <h1 className="font-display text-4xl font-bold text-ink">Review</h1>
-          <p className="mt-2 text-ink-muted">
-            {flat.length} items found across {groups.length} photo{groups.length === 1 ? "" : "s"}.
+      <header className="mb-10">
+        <h1 className="font-display text-4xl font-bold text-ink">Review</h1>
+        <p className="mt-2 text-ink-muted">
+          {flat.length} items found across {groups.length} photo{groups.length === 1 ? "" : "s"}.
+        </p>
+        {scopedPhotoId && (
+          <p className="mt-1 text-xs text-ink-muted">
+            Showing this upload only —{" "}
+            <a href="/review" className="font-medium text-accent underline">view everything processed</a>
           </p>
-          {scopedPhotoId && (
-            <p className="mt-1 text-xs text-ink-muted">
-              Showing this upload only —{" "}
-              <a href="/review" className="font-medium text-accent underline">view everything processed</a>
-            </p>
-          )}
-        </div>
-        <a
-          href="/upload"
-          className="inline-flex items-center gap-2 rounded-full border border-accent/30 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent-soft"
-        >
-          <Upload className="h-4 w-4" /> Upload a photo
-        </a>
+        )}
       </header>
 
       <ProjectStats />
