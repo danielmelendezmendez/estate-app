@@ -14,6 +14,11 @@
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: "../../.env" });
 
+import { join } from "path";
+import { openDb, markDeepPassPublished } from "@estate-app/db";
+
+const DB_PATH = join(process.cwd(), "..", "phase0-cli", "phase0.db");
+
 const USER_TOKEN = process.env.EBAY_SANDBOX_USER_TOKEN;
 const BASE = "https://api.sandbox.ebay.com";
 const MARKETPLACE_ID = "EBAY_US";
@@ -115,7 +120,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { sku, title, description, price, categoryQuery, condition } = await request.json();
+    const { sku, title, description, price, categoryQuery, condition, deepPassResultId } = await request.json();
 
     if (!sku || !title || !price || !categoryQuery) {
       return Response.json(
@@ -222,10 +227,25 @@ export async function POST(request: Request) {
     // Publish
     const published = await ebayFetch("POST", `/sell/inventory/v1/offer/${offerId}/publish`, {});
 
+    const listingUrl = `https://sandbox.ebay.com/itm/${published.listingId}`;
+
+    // Record this durably — without this, "published" only ever lived in
+    // transient client state, which is why there was no real running
+    // total before. deepPassResultId is optional so this route still
+    // works if called without it (e.g. from the CLI test scripts).
+    if (deepPassResultId) {
+      const db = openDb(DB_PATH);
+      markDeepPassPublished(db, deepPassResultId, {
+        price,
+        ebayListingId: published.listingId,
+        ebayListingUrl: listingUrl,
+      });
+    }
+
     return Response.json({
       success: true,
       listingId: published.listingId,
-      url: `https://sandbox.ebay.com/itm/${published.listingId}`,
+      url: listingUrl,
       category: categoryName,
     });
   } catch (err: any) {

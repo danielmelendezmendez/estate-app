@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CheckCircle2, ExternalLink, Loader2, Tag } from "lucide-react";
 
 interface PublishButtonProps {
   sku: string;
@@ -9,11 +10,30 @@ interface PublishButtonProps {
   price: number;
   categoryQuery: string;
   condition: string;
+  deepPassResultId?: number;
+  onPublished?: () => void;
+  alreadyPublished?: boolean;
+  publishedUrl?: string | null;
 }
 
-export function PublishButton({ sku, title, description, price, categoryQuery, condition }: PublishButtonProps) {
-  const [status, setStatus] = useState<"idle" | "publishing" | "success" | "error">("idle");
-  const [result, setResult] = useState<{ url?: string; category?: string; error?: string; body?: unknown }>({});
+export function PublishButton({
+  sku,
+  title,
+  description,
+  price,
+  categoryQuery,
+  condition,
+  deepPassResultId,
+  onPublished,
+  alreadyPublished,
+  publishedUrl,
+}: PublishButtonProps) {
+  const [status, setStatus] = useState<"idle" | "publishing" | "success" | "error">(
+    alreadyPublished ? "success" : "idle"
+  );
+  const [result, setResult] = useState<{ url?: string; category?: string; error?: string; body?: unknown }>(
+    alreadyPublished ? { url: publishedUrl ?? undefined, category: categoryQuery } : {}
+  );
 
   async function handlePublish() {
     setStatus("publishing");
@@ -21,7 +41,7 @@ export function PublishButton({ sku, title, description, price, categoryQuery, c
       const res = await fetch("/api/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku, title, description, price, categoryQuery, condition }),
+        body: JSON.stringify({ sku, title, description, price, categoryQuery, condition, deepPassResultId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -31,6 +51,11 @@ export function PublishButton({ sku, title, description, price, categoryQuery, c
       }
       setResult({ url: data.url, category: data.category });
       setStatus("success");
+      onPublished?.();
+      // Lets the persistent ProjectStats bar (a separate component,
+      // possibly on a different part of the tree) know to refetch —
+      // there's no other channel between them.
+      window.dispatchEvent(new Event("estate-app:stats-changed"));
     } catch (err: any) {
       setResult({ error: err.message });
       setStatus("error");
@@ -39,11 +64,19 @@ export function PublishButton({ sku, title, description, price, categoryQuery, c
 
   if (status === "success") {
     return (
-      <div className="mt-3 rounded-md bg-confidence-high-bg px-3 py-2 text-sm">
-        <p className="text-ink">Published to {result.category}.</p>
-        <a href={result.url} target="_blank" rel="noreferrer" className="underline text-ink">
-          View listing →
-        </a>
+      <div className="mt-3 flex items-center gap-2 rounded-xl bg-confidence-high-bg px-4 py-3 text-sm">
+        <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-confidence-high" />
+        <div>
+          <p className="font-medium text-ink">Published to {result.category}</p>
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-confidence-high underline"
+          >
+            View listing <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
       </div>
     );
   }
@@ -53,15 +86,23 @@ export function PublishButton({ sku, title, description, price, categoryQuery, c
       <button
         onClick={handlePublish}
         disabled={status === "publishing"}
-        className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-stone transition disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-accent-hover hover:shadow-card-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {status === "publishing" ? "Publishing to eBay..." : "Publish to eBay (Sandbox)"}
+        {status === "publishing" ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> Publishing to eBay...
+          </>
+        ) : (
+          <>
+            <Tag className="h-4 w-4" /> Publish to eBay (Sandbox)
+          </>
+        )}
       </button>
       {status === "error" && (
         <div className="mt-2">
           <p className="text-xs text-confidence-low">{result.error}</p>
           {result.body ? (
-            <pre className="mt-1 max-w-lg overflow-x-auto rounded bg-ink/5 p-2 text-[10px] text-ink-muted">
+            <pre className="mt-1 max-w-lg overflow-x-auto rounded-lg bg-ink/5 p-2 text-[10px] text-ink-muted">
               {JSON.stringify(result.body, null, 2)}
             </pre>
           ) : null}

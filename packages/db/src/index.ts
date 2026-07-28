@@ -13,14 +13,16 @@
  * v3 change: deep_pass_results now stores ONE ROW PER ITEM, not one row
  * per photo — the fix for the "why does deep-dive only show the PC, not
  * the monitors" gap. Added an item_name column to correlate each result
- * back to its triage item. The table already had no unique constraint on
- * photo_id, so multiple rows per photo always worked at the storage
- * layer — getReviewData just wasn't reading them all.
+ * back to its triage item.
  *
- * BREAKING: if you have an existing phase0.db from before this change,
- * delete it — CREATE TABLE IF NOT EXISTS won't retroactively add the new
- * item_name column to an already-existing table, and old rows won't have
- * one anyway. It'll recreate fresh with the new schema on next use.
+ * v4 change: deep_pass_results now tracks PUBLISH STATUS — previously
+ * "published" only lived in transient React state on the client, meaning
+ * it vanished on refresh and there was no way to show a real running
+ * total ("14 items found, 6 published, ~€890 recovered") across the whole
+ * project. Added published/published_price/ebay_listing_id/
+ * ebay_listing_url/published_at columns, plus getProjectStats() to
+ * compute the aggregate. Uses ALTER TABLE with a safe catch for DBs that
+ * already have these columns, rather than requiring another full wipe.
  *
  * Table shapes deliberately mirror what's already defined in
  * @estate-app/schema, so porting this to Postgres in Phase 1 is a
@@ -96,6 +98,25 @@ export function openDb(dbPath: string): DatabaseSync {
       suggested_price REAL
     );
   `);
+
+  // v4 migration: add publish-tracking columns to any DB created before
+  // this change. Each ALTER is wrapped individually since SQLite errors
+  // (rather than no-ops) on "duplicate column" — safe to re-run.
+  const publishColumns = [
+    "ALTER TABLE deep_pass_results ADD COLUMN published INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE deep_pass_results ADD COLUMN published_price REAL",
+    "ALTER TABLE deep_pass_results ADD COLUMN ebay_listing_id TEXT",
+    "ALTER TABLE deep_pass_results ADD COLUMN ebay_listing_url TEXT",
+    "ALTER TABLE deep_pass_results ADD COLUMN published_at TEXT",
+  ];
+  for (const stmt of publishColumns) {
+    try {
+      db.exec(stmt);
+    } catch {
+      // column already exists — fine, this DB was created with v4 schema
+      // or has already been migrated
+    }
+  }
 
   return db;
 }
@@ -183,6 +204,32 @@ export function insertDeepPassResults(
 }
 
 /**
+ * Marks a deep-pass item as published — the durable record that makes a
+ * real running total possible, instead of publish success only living in
+ * transient client state.
+ */
+export function markDeepPassPublished(
+  db: DatabaseSync,
+  deepPassResultId: number,
+  info: { price: number; ebayListingId: string; ebayListingUrl: string }
+) {
+  db.prepare(`
+    UPDATE deep_pass_results
+    SET published = 1,
+        published_price = @price,
+        ebay_listing_id = @ebayListingId,
+        ebay_listing_url = @ebayListingUrl,
+        published_at = datetime('now')
+    WHERE id = @id
+  `).run({
+    id: deepPassResultId,
+    price: info.price,
+    ebayListingId: info.ebayListingId,
+    ebayListingUrl: info.ebayListingUrl,
+  });
+}
+
+/**
  * Example of exactly the kind of SQL query this DB is for: every triage
  * item that isn't high-confidence, across every photo processed so far —
  * i.e. the Review tab's queue, computed with a WHERE clause instead of
@@ -213,6 +260,42 @@ export function queryHighValueItems(db: DatabaseSync) {
     .all();
 }
 
+export interface ProjectStats {
+  totalItemsFound: number; // every triage item, across every photo
+  totalPublishable: number; // items that got a deep-pass (above the bundle threshold)
+  totalPublished: number;
+  estimatedRecoveredValue: number; // sum of published_price for published items
+}
+
+/**
+ * The running-total query behind the persistent progress bar — real
+ * cumulative numbers across the whole project, not just the current
+ * photo. This is why publish status needed to become a durable DB field
+ * instead of client-only React state.
+ */
+export function getProjectStats(db: DatabaseSync): ProjectStats {
+  const totalItemsFound = (
+    db.prepare("SELECT COUNT(*) as n FROM triage_items").get() as { n: number }
+  ).n;
+
+  const totalPublishable = (
+    db.prepare("SELECT COUNT(*) as n FROM deep_pass_results").get() as { n: number }
+  ).n;
+
+  const publishedRow = db
+    .prepare(
+      "SELECT COUNT(*) as n, COALESCE(SUM(published_price), 0) as total FROM deep_pass_results WHERE published = 1"
+    )
+    .get() as { n: number; total: number };
+
+  return {
+    totalItemsFound,
+    totalPublishable,
+    totalPublished: publishedRow.n,
+    estimatedRecoveredValue: publishedRow.total,
+  };
+}
+
 export interface ReviewPhotoGroup {
   photoId: number;
   filename: string;
@@ -230,6 +313,7 @@ export interface ReviewPhotoGroup {
    * deep-pass, correlated to triage items via itemName.
    */
   deepPass: {
+    id: number; // v4: the actual deep_pass_results row id, needed to mark publish status
     itemName: string;
     brand: string | null;
     model: string | null;
@@ -244,6 +328,8 @@ export interface ReviewPhotoGroup {
     listingTitle: string;
     listingDescription: string;
     suggestedPrice: number;
+    published: boolean;
+    ebayListingUrl: string | null;
   }[];
 }
 
@@ -279,6 +365,7 @@ export function getReviewData(db: DatabaseSync): ReviewPhotoGroup[] {
         uncertaintyReason: t.uncertainty_reason,
       })),
       deepPass: deepPassRows.map((dp) => ({
+        id: dp.id,
         itemName: dp.item_name,
         brand: dp.brand,
         model: dp.model,
@@ -293,6 +380,8 @@ export function getReviewData(db: DatabaseSync): ReviewPhotoGroup[] {
         listingTitle: dp.listing_title,
         listingDescription: dp.listing_description,
         suggestedPrice: dp.suggested_price,
+        published: !!dp.published,
+        ebayListingUrl: dp.ebay_listing_url,
       })),
     };
   });

@@ -16,15 +16,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/review/page.js"
     ],
-    "/api/recalculate/route": [
+    "/api/stats/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/recalculate/route.js"
-    ],
-    "/api/publish/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/publish/route.js"
+      "static/chunks/app/api/stats/route.js"
     ]
   }
 }

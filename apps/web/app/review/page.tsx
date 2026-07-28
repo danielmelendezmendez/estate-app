@@ -2,7 +2,9 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { openDb, getReviewData, type ReviewPhotoGroup } from "@estate-app/db";
 import { CertaintyBar } from "./CertaintyBar";
-import { DeepDiveCard } from "./DeepDiveCard";
+import { DeepDiveSection } from "./DeepDiveSection";
+import { ProjectStats } from "./ProjectStats";
+import { Upload, Archive } from "lucide-react";
 
 // Dev-only wiring: reads the Phase 0 CLI's SQLite output directly. Real
 // storage is Postgres (see docs/architecture.md) once Phase 1 exists —
@@ -74,10 +76,13 @@ export default async function ReviewPage({
 
   if (!existsSync(DB_PATH)) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-24 text-center">
-        <h1 className="font-display text-3xl text-ink">Nothing to review yet</h1>
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-6 py-24 text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft">
+          <Upload className="h-5 w-5 text-accent" />
+        </div>
+        <h1 className="font-display text-3xl font-semibold text-ink">Nothing to review yet</h1>
         <p className="mt-3 text-ink-muted">
-          <a href="/upload" className="underline">Upload a photo</a> to get started, or run the
+          <a href="/upload" className="font-medium text-accent underline">Upload a photo</a> to get started, or run the
           Phase 0 CLI against a folder of photos —{" "}
           <code className="rounded bg-ink/5 px-1.5 py-0.5 font-mono text-sm">
             pnpm --filter phase0-cli dev &lt;photos-folder&gt;
@@ -104,77 +109,120 @@ export default async function ReviewPage({
     low: bucket(flat, "low"),
   };
 
-  const deepDiveCards = groups.flatMap((g) =>
-    g.deepPass.map((dp) => ({
-      ...dp,
-      photoId: g.photoId,
-      filename: g.filename,
-      thumbnailUrl: thumbnailUrlFor(g.filename),
-    }))
+  const deepDiveItems = groups.flatMap((g) =>
+    g.deepPass.map((dp, i) => {
+      let unresolved: any[] = [];
+      try {
+        unresolved = JSON.parse(dp.unresolvedAttributes);
+      } catch {
+        // leave empty if malformed
+      }
+      return {
+        photoId: g.photoId,
+        resultId: dp.id,
+        itemKey: `${g.photoId}-${i}`,
+        itemName: dp.itemName,
+        filename: g.filename,
+        thumbnailUrl: thumbnailUrlFor(g.filename),
+        category: dp.category,
+        subcategory: dp.subcategory,
+        condition: dp.condition,
+        confidence: dp.confidence,
+        unresolvedAttributes: unresolved,
+        valueRangeLow: dp.valueRangeLow,
+        valueRangeHigh: dp.valueRangeHigh,
+        listingTitle: dp.listingTitle,
+        listingDescription: dp.listingDescription,
+        suggestedPrice: dp.suggestedPrice,
+        published: dp.published,
+        ebayListingUrl: dp.ebayListingUrl,
+      };
+    })
   );
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
-      <header className="mb-12 flex items-baseline justify-between">
+      <header className="mb-10 flex items-baseline justify-between">
         <div>
-          <h1 className="font-display text-4xl font-medium text-ink">Review</h1>
+          <h1 className="font-display text-4xl font-bold text-ink">Review</h1>
           <p className="mt-2 text-ink-muted">
             {flat.length} items found across {groups.length} photo{groups.length === 1 ? "" : "s"}.
           </p>
           {scopedPhotoId && (
             <p className="mt-1 text-xs text-ink-muted">
-              Showing this upload only — <a href="/review" className="underline">view everything processed</a>
+              Showing this upload only —{" "}
+              <a href="/review" className="font-medium text-accent underline">view everything processed</a>
             </p>
           )}
         </div>
         <a
           href="/upload"
-          className="rounded-md border border-ink/20 px-4 py-2 text-sm font-medium text-ink transition hover:border-ink/40"
+          className="inline-flex items-center gap-2 rounded-full border border-accent/30 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent-soft"
         >
-          Upload a photo
+          <Upload className="h-4 w-4" /> Upload a photo
         </a>
       </header>
 
-      <div className="space-y-12">
+      <ProjectStats />
+
+      {/* Deep-dive moved to the top — this is the actual task: review,
+          adjust, and publish. The confidence buckets below are reference,
+          not the primary job. */}
+      {deepDiveItems.length > 0 && (
+        <div className="mb-14">
+          <DeepDiveSection items={deepDiveItems} />
+        </div>
+      )}
+
+      {/* Everything else the AI found, kept quieter — mostly the raw
+          triage list, including low-value items headed for bundling
+          rather than individual publish. */}
+      <div className="space-y-10 border-t border-ink/10 pt-10">
+        <div className="flex items-center gap-2 text-ink-muted">
+          <Archive className="h-4 w-4" />
+          <h2 className="font-display text-sm font-semibold uppercase tracking-wide">
+            Everything found in this photo
+          </h2>
+        </div>
         {(["high", "medium", "low"] as const).map((level) => {
           const items = buckets[level];
           const meta = BUCKET_META[level];
           if (items.length === 0) return null;
           return (
             <section key={level}>
-              <div className="mb-4 flex items-baseline justify-between">
-                <h2 className="font-display text-xl font-medium text-ink">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h3 className="font-display text-base font-semibold text-ink">
                   {meta.title}
-                  <span className="ml-2 font-mono text-sm font-normal text-ink-muted">
+                  <span className="ml-2 font-mono text-xs font-normal text-ink-muted">
                     {items.length}
                   </span>
-                </h2>
+                </h3>
               </div>
-              <p className="mb-4 text-sm text-ink-muted">{meta.hint}</p>
+              <p className="mb-3 text-xs text-ink-muted">{meta.hint}</p>
               <ul className="space-y-2">
                 {items.map((item, i) => (
                   <li
                     key={`${item.photoFilename}-${item.itemName}-${i}`}
-                    className={`flex items-start gap-4 rounded-md border border-ink/10 ${meta.bg} px-5 py-4`}
+                    className={`flex items-start gap-3 rounded-xl border border-ink/5 ${meta.bg} px-4 py-3`}
                   >
                     {item.thumbnailUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={item.thumbnailUrl}
                         alt={item.photoFilename}
-                        className="h-16 w-16 flex-shrink-0 rounded object-cover"
+                        className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
                       />
                     )}
-                    <div className="flex flex-1 flex-wrap items-start justify-between gap-3">
+                    <div className="flex flex-1 flex-wrap items-start justify-between gap-2">
                       <div>
-                        <p className="font-body font-medium text-ink">
+                        <p className="text-sm font-medium text-ink">
                           {item.itemName}
                         </p>
                         <p className="mt-0.5 text-xs text-ink-muted">
                           {item.category} · from {item.photoFilename}
                         </p>
                         {item.uncertaintyReason && (
-                          <p className="mt-2 text-sm text-ink-muted">
+                          <p className="mt-1 text-xs text-ink-muted">
                             {item.uncertaintyReason}
                           </p>
                         )}
@@ -188,52 +236,6 @@ export default async function ReviewPage({
           );
         })}
       </div>
-
-      {deepDiveCards.length > 0 && (
-        <section className="mt-16 border-t border-ink/10 pt-10">
-          <h2 className="font-display text-xl font-medium text-ink">
-            Deep-dive analysis
-            <span className="ml-2 font-mono text-sm font-normal text-ink-muted">
-              {deepDiveCards.length}
-            </span>
-          </h2>
-          <p className="mt-2 text-sm text-ink-muted">
-            Every item worth its own detailed look — not just one per
-            photo anymore. Items below the value threshold are bundled
-            instead (see "Ready to list" etc. above).
-          </p>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {deepDiveCards.map((dp, i) => {
-              let unresolved: any[] = [];
-              try {
-                unresolved = JSON.parse(dp.unresolvedAttributes);
-              } catch {
-                // leave empty if malformed
-              }
-              return (
-                <DeepDiveCard
-                  key={`${dp.photoId}-${dp.itemName}-${i}`}
-                  photoId={dp.photoId}
-                  itemKey={`${dp.photoId}-${i}`}
-                  itemName={dp.itemName}
-                  filename={dp.filename}
-                  thumbnailUrl={dp.thumbnailUrl}
-                  category={dp.category}
-                  subcategory={dp.subcategory}
-                  condition={dp.condition}
-                  confidence={dp.confidence}
-                  unresolvedAttributes={unresolved}
-                  valueRangeLow={dp.valueRangeLow}
-                  valueRangeHigh={dp.valueRangeHigh}
-                  listingTitle={dp.listingTitle}
-                  listingDescription={dp.listingDescription}
-                  suggestedPrice={dp.suggestedPrice}
-                />
-              );
-            })}
-          </div>
-        </section>
-      )}
     </main>
   );
 }
